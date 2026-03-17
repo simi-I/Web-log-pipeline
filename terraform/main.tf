@@ -2,9 +2,8 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ---------------------------
+
 # S3 BUCKETS
-# ---------------------------
 
 resource "aws_s3_bucket" "raw_logs" {
   bucket = var.raw_bucket_name
@@ -14,9 +13,7 @@ resource "aws_s3_bucket" "clean_logs" {
   bucket = var.clean_bucket_name
 }
 
-# ---------------------------
 # IAM ROLE FOR LAMBDA
-# ---------------------------
 
 resource "aws_iam_role" "lambda_role" {
   name = "web_log_lambda_role"
@@ -63,9 +60,7 @@ resource "aws_iam_role_policy" "lambda_s3_access" {
   })
 }
 
-# ---------------------------
 # LAMBDA FUNCTION
-# ---------------------------
 
 resource "aws_lambda_function" "log_processor" {
   function_name = "web_log_processor"
@@ -82,11 +77,18 @@ resource "aws_lambda_function" "log_processor" {
       CLEAN_BUCKET = var.clean_bucket_name
     }
   }
+
+  layers = [
+    "arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python311:26"
+  ]
+
+  timeout = 400    # in seconds, adjust based on your CSV size
+  memory_size = 2996
+
 }
 
-# ---------------------------
+
 # ALLOW S3 TO TRIGGER LAMBDA
-# ---------------------------
 
 resource "aws_lambda_permission" "allow_s3" {
   statement_id  = "AllowS3Invoke"
@@ -96,9 +98,8 @@ resource "aws_lambda_permission" "allow_s3" {
   source_arn    = aws_s3_bucket.raw_logs.arn
 }
 
-# ---------------------------
+
 # S3 EVENT TRIGGER
-# ---------------------------
 
 resource "aws_s3_bucket_notification" "trigger_lambda" {
   bucket = aws_s3_bucket.raw_logs.id

@@ -40,7 +40,7 @@ def lambda_handler(event, context):
     df.to_parquet(parquet_buffer, index=False)
 
     s3.put_object(
-        Bucket="web-logs-clean-portfolio",
+        Bucket="web-logs-clean-portfolio-unique",
         Key=f"processed/{key}.parquet",
         Body=parquet_buffer.getvalue()
     )
