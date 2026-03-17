@@ -1,35 +1,48 @@
 import boto3
-import re
 import pandas as pd
-from io import StringIO
+from io import BytesIO, StringIO
 
 s3 = boto3.client("s3")
 
-pattern = re.compile(
-    r'(?P<ip>\S+) .* \[(?P<timestamp>.*?)\]'
-    r'"(?P<method>\S+) (?P<endpoint>\S+) .*" '
-    r'(?P<status>\d+) (?P<bytes>\d+)'
-)
-
 def lambda_handler(event, context):
-    obj = s3.get_object(Bucket="web-logs-raw-portfolio", Key="nasa_logs.txt")
-    logs = obj["Body"].read().decode("utf-8").splitlines()
 
-    parsed = []
-    for line in logs:
-        match = pattern.search(line)
-        if match:
-            parsed.append(match.groupdict)
+    record = event["Records"][0]
+    bucket = record["s3"]["bucket"]["name"]
+    key = record["s3"]["object"]["key"]
 
-    df = pd.DataFrame(parsed)
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    data = obj["Body"].read().decode("utf-8")
 
-    csv_buffer = StringIO()
-    df.to_csv(csv_buffer, index=False)
+    df = pd.read_csv(StringIO(data))
 
-    s3.put_object (
-        Bucket = "web-logs-clean-portfolio",
-        Key = "clean_logs.csv",
-        Body = csv_buffer.getvalue()
+    # Rename columns for consistency
+    df = df.rename(columns={
+        "Requesting_host": "ip",
+        "datetime": "timestamp",
+        "response_size": "bytes"
+    })
+
+    # Parse request column
+    request_parts = df["request"].str.split(" ", expand=True)
+    df["method"] = request_parts[0]
+    df["endpoint"] = request_parts[1]
+    df["protocol"] = request_parts[2]
+
+    # Cleaning
+    df["status"] = df["status"].astype(int)
+    df["bytes"] = df["bytes"].fillna(0).astype(int)
+
+    # Feature engineering
+    df["is_error"] = df["status"] >= 400
+
+    # Convert to Parquet
+    parquet_buffer = BytesIO()
+    df.to_parquet(parquet_buffer, index=False)
+
+    s3.put_object(
+        Bucket="web-logs-clean-portfolio",
+        Key=f"processed/{key}.parquet",
+        Body=parquet_buffer.getvalue()
     )
 
     return {"status": "success"}
