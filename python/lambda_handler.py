@@ -39,9 +39,12 @@ def lambda_handler(event, context):
     parquet_buffer = BytesIO()
     df.to_parquet(parquet_buffer, index=False)
 
+    # Remove file extension from original key to avoid double extension
+    key_without_ext = key.rsplit('.', 1)[0]
+
     s3.put_object(
         Bucket="web-logs-clean-portfolio-unique",
-        Key=f"processed/{key}.parquet",
+        Key=f"processed/{key_without_ext}.parquet",
         Body=parquet_buffer.getvalue()
     )
 
