@@ -17,7 +17,6 @@ def lambda_handler(event, context):
 
     # Rename columns for consistency
     df = df.rename(columns={
-        "Requesting_host": "ip",
         "datetime": "timestamp",
         "response_size": "bytes"
     })
@@ -35,6 +34,8 @@ def lambda_handler(event, context):
     # Feature engineering
     df["is_error"] = df["status"] >= 400
 
+
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
     # Convert to Parquet
     parquet_buffer = BytesIO()
     df.to_parquet(parquet_buffer, index=False)
