@@ -2,7 +2,8 @@
 
 A complete data pipeline for processing and visualizing NASA web server logs (August 1995) using AWS services (S3, Lambda, Athena) and Amazon QuickSight.
 
-**Dataset**: 1.57M web requests from NASA servers | **Time Period**: August 1995
+**Dataset**: 1.57M web requests from NASA servers | **Time Period**: August 1995  
+**Source**: NASA website logs dataset from Kaggle – https://www.kaggle.com/datasets/djaouadnm/nasa-website-data
 
 ---
 
@@ -26,14 +27,14 @@ Athena (SQL Queries) + QuickSight (Visualizations)
 - **Data Storage**: Processed logs stored in Parquet format in S3
 - **Analytics**: Query processed data using Amazon Athena
 - **Visualizations**: 8 interactive dashboards in Amazon QuickSight:
-  - HTTP Status Code Distribution
-  - Traffic Over Time (Hourly)
+  - Total Requests
+  - Unique Requesting Hosts
   - Top 15 Requesting Hosts
-  - Response Size Distribution
-  - Response Size by Status Code
-  - HTTP Request Methods
-  - Top Resource Types
-  - Traffic Heatmap (Day vs Hour)
+  - Avg. Response Size (KB)
+  - Avg. Error Rate (%)
+  - Requests Per Day
+  - Requests by Response Status
+  - Error Rate Trend
 
 ---
 
@@ -51,12 +52,10 @@ Athena (SQL Queries) + QuickSight (Visualizations)
 ```
 Web log pipeline/
 ├── README.md                    # This file
-├── QUICKSIGHT_MANUAL.md         # Manual QuickSight setup guide
-├── data/
-│   └── nasa_aug95_c.csv         # Raw web logs (1.5GB)
+├── quicksight_view.png          # QuickSight dashboard view
 ├── python/
 │   ├── upload_logs.py           # S3 upload script
-│   └── lambda_handler.py         # Lambda function for data processing
+│   └── lambda_handler.py         # Lambda function
 ├── terraform/
 │   ├── main.tf                  # AWS resources (Lambda, S3, IAM)
 │   ├── variables.tf             # Configuration variables
@@ -87,6 +86,18 @@ This creates:
 - Lambda function with necessary IAM permissions
 - Outputs bucket names for reference
 
+#### Packaging the Lambda Function
+
+Before running `terraform apply`, package the Lambda code into a ZIP file so Terraform can upload it:
+
+```bash
+cd python/
+zip lambda_handler.zip lambda_handler.py
+mv lambda_handler.zip ../terraform/
+```
+
+Then, ensure your Terraform configuration in the `terraform` folder points to this ZIP file (for example using `filename = "lambda_handler.zip"` or a similar argument on the Lambda resource).
+
 ### 2. Upload Raw Data
 
 ```bash
@@ -106,37 +117,16 @@ The Lambda function automatically triggers when a new file is uploaded to the ra
 
 ### 4. Query with Athena
 
-```sql
-CREATE EXTERNAL TABLE IF NOT EXISTS `weblog`.`weblogtable` (
-  `requestinghost` string,
-  `timestamp` timestamp,
-  `request` string,
-  `status` int,
-  `bytes` int,
-  `method` string,
-  `endpoint` string,
-  `protocol` string,
-  `is_error` boolean
-)
-ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat' 
-OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-LOCATION 's3://web-logs-clean-portfolio-unique/processed/'
-TBLPROPERTIES ('classification' = 'parquet');
-
--- Query example: Top endpoints
-SELECT endpoint, COUNT(*) AS hits
-FROM weblogtable
-GROUP BY endpoint
-ORDER BY hits DESC
-LIMIT 10;
-```
 
 ### 5. Visualize in QuickSight
 
-See [QUICKSIGHT_MANUAL.md](QUICKSIGHT_MANUAL.md) for step-by-step instructions to create 8 interactive visualizations.
+Once your processed Parquet data is in S3 and registered in Athena, create a new QuickSight dataset from the Athena table and import it into SPICE.
 
----
+- Dashboard view:
+
+  ![QuickSight Dashboard](quicksight_view.png)
+
+
 
 ## ⚙️ Lambda Configuration
 
@@ -157,14 +147,6 @@ layers = [
 - **Runtime**: Python 3.11
 - **Memory**: 2,996 MB (3GB)
 - **Timeout**: 400 seconds (6.67 minutes)
-
-**Why increased specs?**
-- Dataset size: 1.57M rows × 5 columns
-- Parquet encoding is computationally intensive
-- Pandas dataframe requires significant memory for processing
-- 400s timeout allows time for S3 I/O and transformation
-
----
 
 ## 🔧 Troubleshooting
 
